@@ -4,6 +4,7 @@ import { ClipboardManager } from './ClipboardManager';
 import { KeyboardStateManager } from './KeyboardStateManager';
 import { MouseCursorManager } from './MouseCursorManager';
 import { ResolutionManager } from './ResolutionManager';
+import Guacamole from 'guacamole-common-js';
 
 declare const Guacamole: any;
 

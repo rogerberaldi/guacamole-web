@@ -79,7 +79,7 @@ export const GuacamoleClient: React.FC<GuacamoleClientProps> = ({
               <h1 className="text-xl font-bold text-white" style={{ fontFamily: 'Red Hat Display, sans-serif' }}>
                 Red Hat Remote Desktop
               </h1>
-              <p className="text-sm text-neutral-400">Powered by Apache Guacamole</p>
+              <p className="text-sm text-neutral-400">Powered by Red Hat</p>
             </div>
           </div>
 
