@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  guacd:
+    image: guacamole/guacd:1.6.0
+    container_name: guacd
+    restart: unless-stopped
+    networks:
+      - guacamole-network
+    volumes:
+      - guacd-drive:/drive
+      - guacd-record:/record
+    environment:
+      GUACD_LOG_LEVEL: info
+
+  guacamole:
+    image: guacamole/guacamole:1.6.0
+    container_name: guacamole
+    restart: unless-stopped
+    networks:
+      - guacamole-network
+    ports:
+      - "8080:8080"
+    environment:
+      GUACD_HOSTNAME: guacd
+      GUACD_PORT: 4822
+      GUACAMOLE_HOME: /etc/guacamole
+    volumes:
+      - ./guacamole-config:/etc/guacamole
+    depends_on:
+      - guacd
+
+  web-interface:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: guacamole-web-interface
+    restart: unless-stopped
+    networks:
+      - guacamole-network
+    ports:
+      - "80:80"
+    environment:
+      - VITE_GUACAMOLE_WS_URL=ws://localhost:8080/guacamole/websocket-tunnel
+    depends_on:
+      - guacamole
+
+networks:
+  guacamole-network:
+    driver: bridge
+
+volumes:
+  guacd-drive:
+  guacd-record:
