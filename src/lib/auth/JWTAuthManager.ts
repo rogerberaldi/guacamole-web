@@ -98,28 +98,27 @@ export class JWTAuthManager {
     return this.token;
   }
 
+  getGuacId(): string | null {
+    return this.guacId;
+  }
   /*getPayload(): JWTPayload | null {
     return this.payload;
   }*/
 
-    /*
-  getConnectionParams(): Record<string, string> {
-    if (!this.payload?.connection) {
-      return {};
+
+  getConnectionParams(): string {
+
+    if (!this.token || !this.guacId) {
+      throw new Error('No JWT token or GUAC_ID available');
     }
-
-    const params: Record<string, string> = {};
-    const conn = this.payload.connection;
-
-    Object.entries(conn).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        params[key] = String(value);
-      }
-    });
+  
+    const params = `token=${this.token}&GUAC_ID=${this.guacId}&GUAC_TYPE=${this.guacType || "c"}&GUAC_DATA_SOURCE=${this.guacDataSource || "jwt"}`;
+    
+    logger.debug('WebSocket URL Parameters', { params });
 
     return params;
   }
-*/
+
   /*
   isExpired(): boolean {
     if (!this.payload?.exp) {
@@ -142,19 +141,9 @@ export class JWTAuthManager {
   }
 
   buildWebSocketURL(baseURL: string): string {
-    if (!this.token) {
-      throw new Error('No JWT token available');
-    }
-    if (!this.guacId) {
-      throw new Error('No GUAC_ID available');
-    }
 
     const url = new URL(baseURL);
-    url.searchParams.set('token', this.token);
-    url.searchParams.set('GUAC_ID', this.guacId);
-    url.searchParams.set('GUAC_TYPE', this.guacType || "c");
-    url.searchParams.set('GUAC_DATA_SOURCE', this.guacDataSource || "jwt");
-
+    
     logger.debug('WebSocket URL built', { url: url.toString() });
     return url.toString();
   }

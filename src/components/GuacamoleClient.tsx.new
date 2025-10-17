@@ -1,0 +1,54 @@
+// src/components/GuacamoleClient.tsx
+
+import React, { useEffect, useRef } from 'react';
+import { GuacamoleConnection, ConnectionState } from '../lib/guacamole/GuacamoleConnection';
+import { JWTAuthManager } from '../lib/auth/JWTAuthManager';
+import { ConnectionStatus } from './ConnectionStatus';
+
+const GuacamoleClient: React.FC = () => {
+  const displayRef = useRef<HTMLDivElement>(null);
+  const guacConnectionRef = useRef<GuacamoleConnection | null>(null);
+
+  useEffect(() => {
+    // Ensure this runs only once after the component mounts
+    if (guacConnectionRef.current || !displayRef.current) {
+      return;
+    }
+
+    const authManager = new JWTAuthManager();
+    const token = authManager.getToken();
+    const guacId = authManager.getGuacId();
+
+    if (token && guacId) {
+      const connection = new GuacamoleConnection(
+        // Use the ref's current value, which is now a valid DOM element
+        displayRef.current, 
+        'ws://192.168.1.88:8081/websocket-tunnel',
+        (state: ConnectionState) => {
+          console.log(`Connection state is now: ${state}`);
+        }
+      );
+
+      guacConnectionRef.current = connection;
+      connection.connect(token, guacId);
+    }
+
+    // Cleanup on unmount
+    return () => {
+      if (guacConnectionRef.current) {
+        guacConnectionRef.current.disconnect();
+        guacConnectionRef.current = null;
+      }
+    };
+    // The empty dependency array ensures this runs only once on mount
+  }, []); 
+
+  return (
+    <div id="guac-container" style={{ width: '100%', height: '100vh', position: 'relative' }}>
+      <div id="guac-display" ref={displayRef} style={{ width: '100%', height: '100%' }} />
+      <ConnectionStatus />
+    </div>
+  );
+};
+
+export default GuacamoleClient;

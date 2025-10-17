@@ -4,9 +4,9 @@ import { ClipboardManager } from './ClipboardManager';
 import { KeyboardStateManager } from './KeyboardStateManager';
 import { MouseCursorManager } from './MouseCursorManager';
 import { ResolutionManager } from './ResolutionManager';
-import Guacamole from 'guacamole-common-js';
 
-declare const Guacamole: any;
+import Guacamole from "guacamole-common-js";
+
 
 export enum ConnectionState {
   IDLE = 'IDLE',
@@ -92,25 +92,13 @@ export class GuacamoleConnection {
 
     this.setupClientHandlers();
     this.setupInputHandlers();
+    
+    const dataString = this.authManager.getConnectionParams();
 
-    const connectionParams = this.authManager.getConnectionParams();
-    const dataString = this.buildConnectionString(connectionParams);
-
-    logger.info('Connecting to Guacamole', { params: connectionParams });
+    logger.info('Connecting to Guacamole', { params: dataString });
     this.client.connect(dataString);
   }
-
-  private buildConnectionString(params: Record<string, string>): string {
-    const parts: string[] = [];
-
-    Object.entries(params).forEach(([key, value]) => {
-      parts.push(key);
-      parts.push(value);
-    });
-
-    return parts.join('\0');
-  }
-
+  
   private setupClientHandlers(): void {
     this.client.onstatechange = (state: number) => {
       logger.debug('Client state changed', { state });
