@@ -21,45 +21,76 @@ export const GuacamoleClient: React.FC<GuacamoleClientProps> = ({
   const [connectionState, setConnectionState] = useState<ConnectionState>(ConnectionState.IDLE);
   const [error, setError] = useState<string>('');
 
+
+    // Initialize auth manager once
+  useEffect(() => {
+    if (!authManagerRef.current) {
+      authManagerRef.current = new JWTAuthManager();
+    }
+  }, []); // Empty dependency array - run once on mount
+
   useEffect(() => {
     if (debug) {
       logger.setLevel(LogLevel.DEBUG);
     }
 
-    authManagerRef.current = new JWTAuthManager();
-
+    
     if (!authManagerRef.current.isValid()) {
       setError('Invalid or missing JWT token. Please provide a valid token in the URL.');
       setConnectionState(ConnectionState.ERROR);
       return;
     }
 
-    connectionRef.current = new GuacamoleConnection(
-      { websocketURL },
-      authManagerRef.current
-    );
+    let mounted = true;
+    let connectionTimeout: NodeJS.Timeout;
 
-    connectionRef.current.onStateChange((state) => {
-      setConnectionState(state);
-      if (state === ConnectionState.CONNECTED) {
-        setError('');
-      }
-    });
+    const initializeConnection = () => {
+      if (!mounted) return;
 
-    connectionRef.current.onError((errorMessage) => {
-      setError(errorMessage);
-    });
+      connectionRef.current = new GuacamoleConnection(
+        { websocketURL },
+        authManagerRef.current!
+      );
 
-    if (containerRef.current) {
-      connectionRef.current.connect(containerRef.current);
-    }
+      connectionRef.current.onStateChange((state) => {
+        if (mounted) {
+          setConnectionState(state);
+          if (state === ConnectionState.CONNECTED) {
+            setError('');
+          }
+        }
+      });
+
+      connectionRef.current.onError((errorMessage) => {
+        if (mounted) {
+          setError(errorMessage);
+        }
+      });
+
+      // Wait for DOM to be ready
+      connectionTimeout = setTimeout(() => {
+        if (mounted && containerRef.current) {
+          logger.info('Connecting to Guacamole with container:', containerRef.current);
+          connectionRef.current?.connect(containerRef.current);
+        }
+      }, 500);
+    };
+
+    initializeConnection();
 
     return () => {
-      if (connectionRef.current) {
+      mounted = false;
+      clearTimeout(connectionTimeout);
+      
+      // Only disconnect if we're not in an error state and connection exists
+      if (connectionRef.current && connectionRef.current.getState() !== ConnectionState.ERROR) {
+        logger.info('Cleaning up connection');
         connectionRef.current.disconnect();
       }
+      connectionRef.current = null;
     };
-  }, [websocketURL, debug]);
+  }, [websocketURL]); // Only depend on websocketURL, not debug
+
 
   const handleDisconnect = () => {
     if (connectionRef.current) {
@@ -137,7 +168,7 @@ export const GuacamoleClient: React.FC<GuacamoleClientProps> = ({
 
         <div
           ref={containerRef}
-          className="w-full h-full bg-black"
+          className="h-full overflow-hidden flex items-center justify-center"
           style={{ cursor: 'none' }}
         />
       </main>

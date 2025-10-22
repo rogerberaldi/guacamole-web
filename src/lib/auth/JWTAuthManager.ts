@@ -29,8 +29,6 @@ export interface JWTPayload {
 export class JWTAuthManager {
   private token: string | null = null;
   private guacId: string | null = null;
-  private guacType: string | null = "c";
-  private guacDataSource: string | null = "jwt";
   //private payload: JWTPayload | null = null;
 
   constructor() {
@@ -46,12 +44,12 @@ export class JWTAuthManager {
     if (tokenFromURL) {
       //this.token(tokenFromURL);
       this.token = tokenFromURL;
-      window.history.replaceState({}, document.title, window.location.pathname);
+      //window.history.replaceState({}, document.title, window.location.pathname);
       logger.info('JWT token extracted from URL');
     }
     if (guacIdFromURL) {
       this.guacId = guacIdFromURL;
-      window.history.replaceState({}, document.title, window.location.pathname);
+      //window.history.replaceState({}, document.title, window.location.pathname);
       logger.info('GUAC_ID extracted from URL');
     }
     
@@ -112,9 +110,13 @@ export class JWTAuthManager {
       throw new Error('No JWT token or GUAC_ID available');
     }
   
-    const params = `token=${this.token}&GUAC_ID=${this.guacId}&GUAC_TYPE=${this.guacType || "c"}&GUAC_DATA_SOURCE=${this.guacDataSource || "jwt"}`;
+    const params = `token=${encodeURIComponent(this.token)}&GUAC_DATA_SOURCE=jwt&GUAC_ID=${encodeURIComponent(this.guacId)}&GUAC_TYPE=c`;
     
-    logger.debug('WebSocket URL Parameters', { params });
+    logger.debug('Connection parameters for client.connect', { 
+      tokenLength: this.token.length,
+      guacId: this.guacId,
+      params 
+    });
 
     return params;
   }
@@ -142,10 +144,8 @@ export class JWTAuthManager {
 
   buildWebSocketURL(baseURL: string): string {
 
-    const url = new URL(baseURL);
-    
-    logger.debug('WebSocket URL built', { url: url.toString() });
-    return url.toString();
+    logger.debug('WebSocket URL built (base only)', { url: baseURL });
+    return baseURL;
   }
 
   getAuthHeaders(): Record<string, string> {

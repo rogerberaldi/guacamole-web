@@ -1,6 +1,5 @@
 import { logger } from '../utils/logger';
-
-declare const Guacamole: any;
+import Guacamole from 'guacamole-common-js'; // Add this import
 
 export class ClipboardManager {
   private client: any;

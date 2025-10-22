@@ -112,11 +112,16 @@ export class ResolutionManager {
   private calculateOptimalSize(): { width: number; height: number } {
     const rect = this.container.getBoundingClientRect();
 
+    // Ensure we have valid dimensions
+    let containerWidth = Math.max(1, rect.width);
+    let containerHeight = Math.max(1, rect.height);
+
     const devicePixelRatio = window.devicePixelRatio || 1;
 
-    let width = Math.floor(rect.width * devicePixelRatio);
-    let height = Math.floor(rect.height * devicePixelRatio);
+    let width = Math.floor(containerWidth * devicePixelRatio);
+    let height = Math.floor(containerHeight * devicePixelRatio);
 
+    // Apply constraints
     width = Math.max(this.config.minWidth, Math.min(width, this.config.maxWidth));
     height = Math.max(this.config.minHeight, Math.min(height, this.config.maxHeight));
 

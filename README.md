@@ -1,4 +1,4 @@
-# Red Hat Remote Desktop - Custom Apache Guacamole Web Interface
+  # Red Hat Remote Desktop - Custom Apache Guacamole Web Interface
 
 A production-ready, enterprise-grade web interface for Apache Guacamole remote desktop connections with Red Hat branding. This solution addresses common Guacamole implementation challenges including copy/paste functionality, stuck keys, mouse cursor synchronization, and dynamic resolution handling.
 
