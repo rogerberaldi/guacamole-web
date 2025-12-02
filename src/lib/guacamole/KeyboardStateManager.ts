@@ -26,7 +26,7 @@ export class KeyboardStateManager {
       if (originalKeyDown) {
         return originalKeyDown.call(this.keyboard, keysym);
       }
-      return true;
+      return false;
     };
 
     const originalKeyUp = this.keyboard.onkeyup;
@@ -57,7 +57,7 @@ export class KeyboardStateManager {
     this.pressedKeys.clear();
   };
 
-  private releaseAllKeys(): void {
+  public releaseAllKeys(): void {
     if (this.pressedKeys.size === 0) {
       return;
     }

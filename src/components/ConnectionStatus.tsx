@@ -68,17 +68,26 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({ state, error
   const Icon = config.icon;
 
   return (
-    <div className="flex items-center gap-3">
-      <div className={`${config.bgColor} rounded-full px-4 py-2 flex items-center gap-2`}>
-        <Icon className={`w-4 h-4 ${config.textColor} ${config.animate ? 'animate-spin' : ''}`} />
-        <span className={`text-sm font-medium ${config.textColor}`}>{config.text}</span>
-      </div>
+    <div className="relative group flex items-center">
+      <div
+        className={`w-3 h-3 rounded-full ${config.bgColor} ${config.animate ? 'animate-pulse' : ''} cursor-default transition-colors duration-300`}
+        aria-label={config.text}
+      />
 
-      {error && state === ConnectionState.ERROR && (
-        <div className="bg-red-900 border border-red-700 rounded-lg px-4 py-2 max-w-md">
-          <p className="text-sm text-red-100">{error}</p>
+      {/* Tooltip */}
+      <div className="absolute right-0 top-full mt-2 hidden group-hover:block z-50 min-w-[max-content]">
+        <div className="bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl p-3 text-xs text-white">
+          <div className="flex items-center gap-2 mb-1">
+            <Icon className={`w-3 h-3 ${config.textColor} ${config.animate ? 'animate-spin' : ''}`} />
+            <span className="font-medium">{config.text}</span>
+          </div>
+          {error && state === ConnectionState.ERROR && (
+            <div className="text-red-400 max-w-xs border-t border-neutral-700 pt-1 mt-1">
+              {error}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 };

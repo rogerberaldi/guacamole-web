@@ -44,6 +44,14 @@ export class GuacamoleConnection {
   private onStateChangeCallback: ((state: ConnectionState) => void) | null = null;
   private onErrorCallback: ((error: string) => void) | null = null;
 
+  // Retry logic for transient errors
+  private retryCount: number = 0;
+  private maxRetries: number = 2;
+  private retryDelay: number = 3000; // 3 seconds
+  private wasConnected: boolean = false;
+  private reconnectTimeout: NodeJS.Timeout | null = null;
+  private isReconnecting: boolean = false;
+
   constructor(config: ConnectionConfig, authManager: JWTAuthManager) {
     this.config = config;
     this.authManager = authManager;
@@ -77,7 +85,7 @@ export class GuacamoleConnection {
       // Use the exact same pattern as working version
       const wsURL = this.config.websocketURL; // No parameters
       logger.info('Creating WebSocket tunnel', { wsURL });
-      
+
       this.tunnel = new Guacamole.WebSocketTunnel(wsURL);
 
       // Setup handlers
@@ -94,30 +102,30 @@ export class GuacamoleConnection {
       this.client = new Guacamole.Client(this.tunnel);
       this.setupClientHandlers();
       this.__setupInputHandlers();
-      
+
       // Get connection string exactly like working version
       const connectionString = this.authManager.getConnectionParams();
-      logger.info('Connecting with parameters', { 
+      logger.info('Connecting with parameters', {
         connectionString,
         token: this.authManager.getToken(),
         guacId: this.authManager.getGuacId()
       });
-      
+
       // Connect with parameters
       this.client.connect(connectionString);
-      
+
     } catch (error) {
       logger.error('Connection initialization failed', error);
       this.handleError(`Connection failed: ${error}`);
     }
   }
-  
+
   private setupClientHandlers(): void {
-  
+
     this.client.onstatechange = (state: number) => {
       const stateNames = ['IDLE', 'CONNECTING', 'WAITING', 'CONNECTED', 'DISCONNECTING', 'DISCONNECTED'];
       const stateName = stateNames[state] || `UNKNOWN (${state})`;
-      
+
       logger.debug('Client state changed', { state, stateName });
 
       if (state === 3) { // CONNECTED
@@ -130,7 +138,7 @@ export class GuacamoleConnection {
     };
 
     this.client.onerror = (status: any) => {
-      logger.error('Client error occurred', { 
+      logger.error('Client error occurred', {
         status,
         statusCode: status?.code,
         statusMessage: status?.message,
@@ -139,70 +147,71 @@ export class GuacamoleConnection {
       this.handleError(`Client error: ${status.message || 'Unknown error'}`);
     };
 
-    
+
     this.client.onname = (name: string) => {
       logger.info('Connection name received', { name });
       document.title = `Remote Desktop - ${name}`;
     };
 
     this.client.onsync = (timestamp: number) => {
-      logger.debug('Sync received - client and server are synchronized', { timestamp });
+      //logger.debug('Sync received - client and server are synchronized', { timestamp });
+      return;
     };
-    
+
   }
 
 
   private setupInputHandlers(): void {
-  if (!this.container) {
-    return;
-  }
+    if (!this.container) {
+      return;
+    }
 
-  this.display = this.client.getDisplay();
-  const displayElement = this.display.getElement();
+    this.display = this.client.getDisplay();
+    const displayElement = this.display.getElement();
 
-  // Clear the container and append the display element directly
-  this.container.innerHTML = '';
-  this.container.appendChild(displayElement);
+    // Clear the container and append the display element directly
+    this.container.innerHTML = '';
+    this.container.appendChild(displayElement);
 
-  // Let Guacamole handle the display
-  this.display.onresize = (width: number, height: number) => {
-    logger.debug('Display resized by Guacamole', { width, height });
-  };
+    // Let Guacamole handle the display
+    this.display.onresize = (width: number, height: number) => {
+      logger.debug('Display resized by Guacamole', { width, height });
+    };
 
-  // Setup mouse and keyboard
-  this.mouse = new Guacamole.Mouse(displayElement);
-  this.keyboard = new Guacamole.Keyboard(document);
+    // Setup mouse and keyboard
+    this.mouse = new Guacamole.Mouse(displayElement);
+    this.keyboard = new Guacamole.Keyboard(document);
 
-  this.mouse.onmousedown =
-    this.mouse.onmouseup =
-    this.mouse.onmousemove =
+    this.mouse.onmousedown =
+      this.mouse.onmouseup =
+      this.mouse.onmousemove =
       (mouseState: any) => {
         if (this.client) {
           this.client.sendMouseState(mouseState);
         }
       };
 
-  this.keyboard.onkeydown = (keysym: number) => {
-    if (this.client) {
-      this.client.sendKeyEvent(true, keysym);
-    }
-    return true;
-  };
+    this.keyboard.onkeydown = (keysym: number) => {
+      if (this.client) {
+        this.client.sendKeyEvent(true, keysym);
+      }
+      return true;
+    };
 
-  this.keyboard.onkeyup = (keysym: number) => {
-    if (this.client) {
-      this.client.sendKeyEvent(false, keysym);
-    }
-  };
+    this.keyboard.onkeyup = (keysym: number) => {
+      if (this.client) {
+        this.client.sendKeyEvent(false, keysym);
+      }
+    };
 
-  // Initialize managers
-  this.clipboardManager = new ClipboardManager(this.client);
-  this.keyboardStateManager = new KeyboardStateManager(this.client, this.keyboard);
-  this.mouseCursorManager = new MouseCursorManager(this.display, displayElement);
-  this.resolutionManager = new ResolutionManager(this.client, this.container);
+    // Initialize managers
+    this.clipboardManager = new ClipboardManager(this.client);
+    this.keyboardStateManager = new KeyboardStateManager(this.client, this.keyboard);
+    this.mouseCursorManager = new MouseCursorManager(this.display, displayElement);
+    this.resolutionManager = new ResolutionManager(this.client, this.container);
 
-  logger.info('Input handlers configured');
-}
+    logger.info('Input handlers configured');
+  }
 
   private _setupInputHandlers(): void {
 
@@ -217,7 +226,7 @@ export class GuacamoleConnection {
     // Clear the container and append the display element directly
     this.container.innerHTML = '';
     this.container.appendChild(displayElement);
-    
+
     // Style the container to be black (so resizing doesn't show white)
     this.container.style.backgroundColor = 'black';
 
@@ -230,6 +239,9 @@ export class GuacamoleConnection {
         return; // Avoid divide-by-zero
       }
 
+      if (!this.container)
+        return
+
       // Calculate scale to fit container
       const containerWidth = this.container.clientWidth;
       const containerHeight = this.container.clientHeight;
@@ -239,7 +251,7 @@ export class GuacamoleConnection {
         containerWidth / width,   // Scale by width
         containerHeight / height  // Scale by height
       );
-      
+
       this.display.scale(scale);
       logger.debug('Display scale set', { scale, containerWidth, containerHeight });
     };
@@ -260,21 +272,21 @@ export class GuacamoleConnection {
     this.mouse.onmousedown =
       this.mouse.onmouseup =
       this.mouse.onmousemove =
-        (mouseState: any) => {
-          if (this.client) {
-            // We need to scale the mouse coordinates from the container
-            // back to the display's (unscaled) coordinates
-            const scale = this.display.getScale();
-            
-            // Prevent divide by zero if scale is 0
-            if (scale === 0) return;
+      (mouseState: any) => {
+        if (this.client) {
+          // We need to scale the mouse coordinates from the container
+          // back to the display's (unscaled) coordinates
+          const scale = this.display.getScale();
 
-            mouseState.x = mouseState.x / scale;
-            mouseState.y = mouseState.y / scale;
-            
-            this.client.sendMouseState(mouseState);
-          }
-        };
+          // Prevent divide by zero if scale is 0
+          if (scale === 0) return;
+
+          mouseState.x = mouseState.x / scale;
+          mouseState.y = mouseState.y / scale;
+
+          this.client.sendMouseState(mouseState);
+        }
+      };
 
     this.keyboard.onkeydown = (keysym: number) => {
       if (this.client) {
@@ -294,7 +306,7 @@ export class GuacamoleConnection {
     this.keyboardStateManager = new KeyboardStateManager(this.client, this.keyboard);
     // Pass the container (which has cursor:none) to the MouseCursorManager
     this.mouseCursorManager = new MouseCursorManager(this.display, this.container);
-    
+
     // We still use ResolutionManager, but its job is now just to
     // tell the server the *maximum* size we can handle, not the *exact* size.
     // The display.setScale() logic will handle the visual fitting.
@@ -314,34 +326,36 @@ export class GuacamoleConnection {
 
 
     // Clear container and append display
-    this.container.innerHTML = '';    
+    this.container.innerHTML = '';
     this.container.appendChild(displayElement);
 
     // Style the container to be black (so resizing doesn't show white)
     this.container.style.backgroundColor = 'black';
 
 
-    this.addVisualDebugging();
+    //this.addVisualDebugging();
     //this.setupDisplayDebugging();
-    
 
     // Add display event listeners
 
     this.display.onresize = (width: number, height: number) => {
       logger.debug('Display resized', { width, height });
       if (!(width === 0 || height === 0)) {
-        
+
+        if (!this.container)
+          return
+
         // Calculate scale to fit container
         const containerWidth = this.container.clientWidth;
         const containerHeight = this.container.clientHeight;
-        
+
         // Get the minimum scale to fit and maintain aspect ratio
         const scale = Math.min(
           containerWidth / width,   // Scale by width
           containerHeight / height, // Scale by height
           1.0                      // Maximum scale (don't scale up beyond 100%)
         );
-        
+
         this.display.scale(scale);
         logger.debug('Display scaled', { scale, container: `${containerWidth}x${containerHeight}`, display: `${width}x${height}` });
       }
@@ -351,14 +365,14 @@ export class GuacamoleConnection {
     };
 
     this.display.onflush = (canvas: HTMLCanvasElement) => {
-      logger.debug('Display flushed - frame rendered', {canvas});
+      logger.debug('Display flushed - frame rendered', { canvas });
     };
-  
+
     // Force initial display update
     setTimeout(() => {
-    if (this.display.getWidth() > 0 && this.display.getHeight() > 0) {
-      this.display.onresize(this.display.getWidth(), this.display.getHeight());
-    }
+      if (this.display.getWidth() > 0 && this.display.getHeight() > 0) {
+        this.display.onresize(this.display.getWidth(), this.display.getHeight());
+      }
     }, 100);
 
     this.mouse = new Guacamole.Mouse(displayElement);
@@ -367,22 +381,22 @@ export class GuacamoleConnection {
     this.mouse.onmousedown =
       this.mouse.onmouseup =
       this.mouse.onmousemove =
-        (mouseState: any) => {
-          if (this.client) {
-            this.client.sendMouseState(mouseState);
-          }
-        };
+      (mouseState: any) => {
+        if (this.client) {
+          this.client.sendMouseState(mouseState);
+        }
+      };
 
     this.keyboard.onkeydown = (keysym: number) => {
       if (this.client) {
-        this.client.sendKeyEvent(true, keysym);
+        this.client.sendKeyEvent(1, keysym);
       }
-      return true;
+      //return false;
     };
 
     this.keyboard.onkeyup = (keysym: number) => {
       if (this.client) {
-        this.client.sendKeyEvent(false, keysym);
+        this.client.sendKeyEvent(0, keysym);
       }
     };
 
@@ -398,6 +412,11 @@ export class GuacamoleConnection {
     logger.info('Connection established');
     this.setState(ConnectionState.CONNECTED);
 
+    // Reset retry logic on successful connection
+    this.retryCount = 0;
+    this.wasConnected = true;
+    this.isReconnecting = false;
+
     // Log display information
     if (this.display) {
       logger.debug('Display information on connect', {
@@ -407,20 +426,26 @@ export class GuacamoleConnection {
       });
     }
 
-        // Force display refresh
+    // Force display refresh
     setTimeout(() => {
       if (this.display) {
         this.display.flush();
         logger.debug('Manual display flush triggered');
       }
     }, 500);
-    
+
     this.clipboardManager?.startMonitoring();
     this.keyboardStateManager?.activate();
     this.resolutionManager?.start();
   }
 
   private onDisconnected(): void {
+    // Don't process disconnection if we're in the middle of reconnecting
+    if (this.isReconnecting) {
+      logger.info('Ignoring disconnection event during reconnect attempt');
+      return;
+    }
+
     logger.info('Connection closed');
     this.setState(ConnectionState.DISCONNECTED);
     this.cleanup();
@@ -446,6 +471,12 @@ export class GuacamoleConnection {
 
   private cleanup(): void {
     logger.info('Cleaning up connection resources');
+
+    // Clear any pending reconnect timeout
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
 
     this.clipboardManager?.destroy();
     this.keyboardStateManager?.destroy();
@@ -473,7 +504,28 @@ export class GuacamoleConnection {
   }
 
   private handleError(error: string): void {
-    logger.error('Connection error', { error });
+    logger.error('Connection error', { error, retryCount: this.retryCount, wasConnected: this.wasConnected });
+
+    // If we had a successful connection and haven't exceeded max retries, try to reconnect
+    if (this.wasConnected && this.retryCount < this.maxRetries) {
+      this.retryCount++;
+      this.isReconnecting = true;
+      logger.info(`Attempting reconnect ${this.retryCount}/${this.maxRetries} in ${this.retryDelay}ms...`);
+
+      // Clean up current connection without setting ERROR state
+      this.cleanup();
+
+      // Schedule reconnect
+      this.reconnectTimeout = setTimeout(() => {
+        this.setState(ConnectionState.CONNECTING);
+        this.attemptReconnect();
+      }, this.retryDelay);
+
+      return;
+    }
+
+    // Max retries exceeded or initial connection error
+    logger.error('Connection failed permanently', { error, retryCount: this.retryCount });
     this.setState(ConnectionState.ERROR);
 
     if (this.onErrorCallback) {
@@ -481,6 +533,21 @@ export class GuacamoleConnection {
     }
 
     this.cleanup();
+  }
+
+  private attemptReconnect(): void {
+    if (!this.container) {
+      logger.error('Cannot reconnect: container is null');
+      this.handleError('Reconnect failed: container unavailable');
+      return;
+    }
+
+    try {
+      logger.info('Reconnecting...');
+      this.initializeConnection();
+    } catch (error) {
+      this.handleError(`Reconnect failed: ${error}`);
+    }
   }
 
   private setState(newState: ConnectionState): void {
@@ -514,6 +581,13 @@ export class GuacamoleConnection {
     return this.state === ConnectionState.CONNECTED;
   }
 
+  releaseAllKeys(): void {
+    if (this.keyboardStateManager) {
+      this.keyboardStateManager.releaseAllKeys();
+      logger.info('Requested release of all keys via connection');
+    }
+  }
+
   // Add this method to GuacamoleConnection.ts
   private setupDisplayDebugging(): void {
     if (!this.display) return;
@@ -527,7 +601,7 @@ export class GuacamoleConnection {
           height: canvas.height,
           hasContent: canvas.width > 0 && canvas.height > 0
         });
-        
+
         // Check if canvas has any non-black pixels (safe check)
         try {
           const context = canvas.getContext('2d');
@@ -547,16 +621,16 @@ export class GuacamoleConnection {
       } else {
         logger.debug('Canvas flush - canvas is not ready yet');
       }
-      
+
       return originalFlush.call(this.display, canvas);
     };
   }
   private addVisualDebugging(): void {
     if (!this.container) return;
-    
+
     // Add a border to see the container boundaries
     this.container.style.border = '2px solid red';
-    
+
     // Add a debug info overlay
     const debugOverlay = document.createElement('div');
     debugOverlay.style.position = 'absolute';
@@ -569,10 +643,10 @@ export class GuacamoleConnection {
     debugOverlay.style.fontSize = '12px';
     debugOverlay.style.zIndex = '1000';
     debugOverlay.innerHTML = 'Waiting for display...';
-    
+
     this.container.style.position = 'relative';
     this.container.appendChild(debugOverlay);
-    
+
     // Update debug info on resize
     const updateDebugInfo = () => {
       if (this.display) {
@@ -580,7 +654,7 @@ export class GuacamoleConnection {
         const displayHeight = this.display.getHeight();
         const containerWidth = this.container?.clientWidth;
         const containerHeight = this.container?.clientHeight;
-        
+
         debugOverlay.innerHTML = `
           Display: ${displayWidth}x${displayHeight}<br>
           Container: ${containerWidth}x${containerHeight}<br>
@@ -588,7 +662,7 @@ export class GuacamoleConnection {
         `;
       }
     };
-    
+
     // Update periodically
     setInterval(updateDebugInfo, 1000);
     updateDebugInfo();

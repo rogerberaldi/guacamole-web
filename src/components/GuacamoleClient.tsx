@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Monitor, LogOut } from 'lucide-react';
+import { LogOut, Settings, Keyboard } from 'lucide-react';
 import { GuacamoleConnection, ConnectionState } from '../lib/guacamole/GuacamoleConnection';
 import { JWTAuthManager } from '../lib/auth/JWTAuthManager';
 import { ConnectionStatus } from './ConnectionStatus';
@@ -20,9 +20,10 @@ export const GuacamoleClient: React.FC<GuacamoleClientProps> = ({
 
   const [connectionState, setConnectionState] = useState<ConnectionState>(ConnectionState.IDLE);
   const [error, setError] = useState<string>('');
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
 
-    // Initialize auth manager once
+  // Initialize auth manager once
   useEffect(() => {
     if (!authManagerRef.current) {
       authManagerRef.current = new JWTAuthManager();
@@ -34,7 +35,8 @@ export const GuacamoleClient: React.FC<GuacamoleClientProps> = ({
       logger.setLevel(LogLevel.DEBUG);
     }
 
-    
+
+
     if (!authManagerRef.current.isValid()) {
       setError('Invalid or missing JWT token. Please provide a valid token in the URL.');
       setConnectionState(ConnectionState.ERROR);
@@ -81,7 +83,7 @@ export const GuacamoleClient: React.FC<GuacamoleClientProps> = ({
     return () => {
       mounted = false;
       clearTimeout(connectionTimeout);
-      
+
       // Only disconnect if we're not in an error state and connection exists
       if (connectionRef.current && connectionRef.current.getState() !== ConnectionState.ERROR) {
         logger.info('Cleaning up connection');
@@ -101,30 +103,70 @@ export const GuacamoleClient: React.FC<GuacamoleClientProps> = ({
   return (
     <div className="min-h-screen bg-neutral-900 flex flex-col">
       <header className="bg-neutral-800 border-b border-neutral-700 shadow-lg">
-        <div className="px-6 py-4 flex items-center justify-between">
+        <div className="px-6 py-2 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-red-600 rounded flex items-center justify-center">
-              <Monitor className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-white" style={{ fontFamily: 'Red Hat Display, sans-serif' }}>
-                Red Hat Remote Desktop
-              </h1>
-              <p className="text-sm text-neutral-400">Powered by Red Hat</p>
-            </div>
+            <img
+              src="/redhat-logo.svg"
+              alt="Red Hat"
+              className="h-6 w-auto"
+            />
+
           </div>
 
           <div className="flex items-center gap-4">
             <ConnectionStatus state={connectionState} error={error} />
 
             {connectionState === ConnectionState.CONNECTED && (
-              <button
-                onClick={handleDisconnect}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors font-medium"
-              >
-                <LogOut className="w-4 h-4" />
-                Disconnect
-              </button>
+              <>
+                <div className="relative">
+                  <button
+                    onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+                    className={`p-2 rounded-lg transition-colors ${isSettingsOpen ? 'bg-neutral-700 text-white' : 'text-neutral-400 hover:text-white hover:bg-neutral-700'}`}
+                    aria-label="Settings"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
+
+                  {isSettingsOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setIsSettingsOpen(false)}
+                      />
+                      <div className="absolute right-0 top-full mt-2 w-48 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl z-50 overflow-hidden">
+                        <div className="py-1">
+                          <button
+                            onClick={() => {
+                              connectionRef.current?.releaseAllKeys();
+                              setIsSettingsOpen(false);
+                            }}
+                            className="w-full px-4 py-2 text-left text-sm text-neutral-300 hover:bg-neutral-700 hover:text-white flex items-center gap-2"
+                          >
+                            <Keyboard className="w-4 h-4" />
+                            Release all Keys
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className="relative group">
+                  <button
+                    onClick={handleDisconnect}
+                    className="bg-neutral-700 hover:bg-red-600 text-white p-2 rounded-lg transition-colors"
+                    aria-label="Disconnect"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                  {/* Tooltip */}
+                  <div className="absolute right-0 top-full mt-2 hidden group-hover:block z-50">
+                    <div className="bg-neutral-800 border border-neutral-700 rounded px-2 py-1 text-xs text-white whitespace-nowrap shadow-xl">
+                      Disconnect
+                    </div>
+                  </div>
+                </div>
+              </>
             )}
           </div>
         </div>
@@ -135,8 +177,12 @@ export const GuacamoleClient: React.FC<GuacamoleClientProps> = ({
           <div className="absolute inset-0 flex items-center justify-center bg-neutral-900 z-10">
             <div className="max-w-md w-full mx-auto p-6">
               <div className="bg-neutral-800 rounded-lg shadow-xl p-8 text-center">
-                <div className="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Monitor className="w-8 h-8 text-white" />
+                <div className="flex justify-center mb-4">
+                  <img
+                    src="/redhat-logo.svg"
+                    alt="Red Hat"
+                    className="h-12 w-auto"
+                  />
                 </div>
                 <h2 className="text-2xl font-bold text-white mb-2">Connection Failed</h2>
                 <p className="text-neutral-400 mb-6">{error}</p>
@@ -153,18 +199,18 @@ export const GuacamoleClient: React.FC<GuacamoleClientProps> = ({
 
         {(connectionState === ConnectionState.IDLE ||
           connectionState === ConnectionState.CONNECTING) && (
-          <div className="absolute inset-0 flex items-center justify-center bg-neutral-900">
-            <div className="text-center">
-              <div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p className="text-white text-lg font-medium">
-                {connectionState === ConnectionState.IDLE
-                  ? 'Initializing...'
-                  : 'Connecting to remote desktop...'}
-              </p>
-              <p className="text-neutral-400 text-sm mt-2">Please wait</p>
+            <div className="absolute inset-0 flex items-center justify-center bg-neutral-900">
+              <div className="text-center">
+                <div className="w-16 h-16 border-4 border-red-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                <p className="text-white text-lg font-medium">
+                  {connectionState === ConnectionState.IDLE
+                    ? 'Initializing...'
+                    : 'Connecting to remote desktop...'}
+                </p>
+                <p className="text-neutral-400 text-sm mt-2">Please wait</p>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         <div
           ref={containerRef}
